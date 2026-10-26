@@ -16,7 +16,7 @@
   --error: #cf1322;  --error-bg: #fff1f0;  --error-line: #ffccc7;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px rgba(0, 0, 0, 0.02);
   --radius: 8px;
-  color-scheme: light;
+  color-scheme: only light;
 }
 /* QHR فاتح دائمًا: لا نتبع الوضع الداكن للنظام */
 * { box-sizing: border-box; }
