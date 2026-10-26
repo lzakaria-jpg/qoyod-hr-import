@@ -464,44 +464,68 @@ export default function App() {
     return <input type="text" placeholder="قيمة للكل…" defaultValue={constants[f.key] ?? ''} key={constants[f.key] ?? ''} onBlur={(e) => setConst(f.key, e.target.value.trim())} />;
   };
   const mappedCount = headers.filter((h) => keysOfCol(h.col).length).length;
-  const ColumnCards = (
-    <div className="colgrid">
-      {headers.map((h) => {
-        const ks = keysOfCol(h.col);
-        const st = cardState(h.col);
-        const samples = columnSample(prepared, h.col, 3);
-        return (
-          <div key={h.col} className={`colcard ${st.cls}`}>
-            <div className="colcard-head">
-              <b title={h.text}>{h.text}</b>
-              <span className="tag">{st.tag}</span>
-            </div>
-            <div className="samples">
-              {samples.length ? samples.map((s, i) => <div key={i} dir="auto" title={s}>{s}</div>) : <div className="muted">— فاضي —</div>}
-            </div>
-            <div className="arrow">↓ يروح إلى</div>
-            <select value={ks[0] || ''} onChange={(e) => setColField(h.col, e.target.value)}>
-              <option value="">— تجاهل هذا العمود —</option>
-              <optgroup label="الاسم الكامل (يُقسَّم تلقائيًا)">
-                {VIRTUAL_FIELDS.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
-              </optgroup>
-              {Object.entries(GROUPS).map(([g, gl]) => (
-                <optgroup key={g} label={gl}>
-                  {FIELDS.filter((f) => f.group === g).map((f) => {
-                    const other = mapping[f.key] && mapping[f.key].col !== h.col;
-                    return <option key={f.key} value={f.key}>{f.label}{tplFile.tpl.required.has(f.key) ? ' *' : ''}{other ? ' (مربوط بعمود آخر)' : ''}</option>;
-                  })}
-                </optgroup>
-              ))}
-            </select>
-            {ks.length > 1 && <div className="extra">وكمان: {ks.slice(1).map((k) => <span key={k} className="chip gray">{labelOf(k)} <button className="x" onClick={() => setMapping((m) => { const n = { ...m }; delete n[k]; return n; })} aria-label="إزالة">×</button></span>)}</div>}
-          </div>
-        );
-      })}
+  // جدول المطابقة: صف اختيار حقل قيود، تحته عنوان عمود العميل، تحته أول صفوف البيانات للتأكيد
+  const FieldPicker = ({ col }) => {
+    const ks = keysOfCol(col);
+    return (
+      <select value={ks[0] || ''} onChange={(e) => setColField(col, e.target.value)} title={ks[0] ? labelOf(ks[0]) : 'تجاهل'}>
+        <option value="">— تجاهل —</option>
+        <optgroup label="الاسم الكامل (يُقسَّم تلقائيًا)">
+          {VIRTUAL_FIELDS.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
+        </optgroup>
+        {Object.entries(GROUPS).map(([g, gl]) => (
+          <optgroup key={g} label={gl}>
+            {FIELDS.filter((f) => f.group === g).map((f) => {
+              const other = mapping[f.key] && mapping[f.key].col !== col;
+              return <option key={f.key} value={f.key}>{f.label}{tplFile.tpl.required.has(f.key) ? ' *' : ''}{other ? ' (مربوط بعمود آخر)' : ''}</option>;
+            })}
+          </optgroup>
+        ))}
+      </select>
+    );
+  };
+  const previewRows = prepared ? prepared.data.slice(0, 6) : [];
+  const MapTable = (
+    <div className="maptable-wrap">
+      <table className="maptable">
+        <thead>
+          <tr className="pick">
+            {headers.map((h) => <th key={h.col} className={cardState(h.col).cls}><FieldPicker col={h.col} /></th>)}
+          </tr>
+          <tr className="colname">
+            {headers.map((h) => {
+              const ks = keysOfCol(h.col);
+              const st = cardState(h.col);
+              return (
+                <th key={h.col} className={st.cls} title={h.text}>
+                  <span className="nm">{h.text}</span>
+                  {st.cls === 'check' && <span className="chip review">تأكد</span>}
+                  {ks.length > 1 && <span className="also">+ {ks.slice(1).map(labelOf).join('، ')}</span>}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {previewRows.map((r, i) => (
+            <tr key={i}>
+              {headers.map((h) => <td key={h.col} className={cardState(h.col).cls} dir="auto">{cellText(r[h.col])}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+  const scrollToMissing = () => document.getElementById('missing-required')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const MissingNotice = missingRequired.length > 0 && (
+    <div className="banner err missing-notice">
+      <b>ناقص {missingRequired.length} من الحقول الإلزامية ({requiredKeys.length - missingRequired.length} / {requiredKeys.length}):</b>
+      {missingRequired.map((k) => <button key={k} className="chip error" onClick={scrollToMissing}>{FIELD_BY_KEY[k].label}</button>)}
+      <span className="hint">اختر لها عمود من القوائم بالجدول، أو ثبّت قيمة للكل تحت.</span>
     </div>
   );
   const MissingRequired = missingRequired.length > 0 ? (
-    <div className="card">
+    <div className="card" id="missing-required">
       <h2>حقول قيود الإلزامية الناقصة ({missingRequired.length})</h2>
       <p className="sub">ملف العميل ما فيه عمود لها. اختر لها عمود من الكروت فوق، أو ثبّت قيمة وحدة لكل الموظفين هنا (وتقدر تعدّلها لكل موظف بالمراجعة).</p>
       <div className="missgrid">
@@ -594,9 +618,16 @@ export default function App() {
             </div>
           )}
           <div className="card">
-            <h2>أعمدة ملف العميل ({headers.length})</h2>
-            <p className="sub">كل كرت = عمود من ملف العميل مع عيّنة من المكتوب فيه، وتحته الحقل اللي يروح له بقيود.</p>
-            {ColumnCards}
+            <h2 className="title-bar">مطابقة أعمدة الملف</h2>
+            <p className="sub">اختر من كل قائمة حقل قيود المقابل لعمود العميل، أو اتركه "تجاهل". تحت كل قائمة عنوان العمود كما ورد بالملف، وعيّنة من قيمه للتأكيد.</p>
+            {MissingNotice}
+            {MapTable}
+            <div className="maplegend">
+              <span><i className="sw mapped" /> مربوط</span>
+              <span><i className="sw check" /> مربوط — تأكد منه</span>
+              <span><i className="sw ignored" /> متجاهَل</span>
+              <span className="muted">عرض أول {previewRows.length} صفوف من {prepared.data.length}</span>
+            </div>
           </div>
           {MissingRequired}
         </>
