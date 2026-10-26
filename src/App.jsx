@@ -146,7 +146,14 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [askSample, setAskSample] = useState(false);
 
-  const flash = useCallback((m) => { setToast(m); setTimeout(() => setToast(''), 3200); }, []);
+  // رسالة قصيرة، واختياريًا زر إجراء ({label, fn}) يبقى ظاهرًا وقت أطول
+  const [toastAction, setToastAction] = useState(null);
+  const toastTimer = useRef(null);
+  const flash = useCallback((m, action = null) => {
+    setToast(m); setToastAction(action);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => { setToast(''); setToastAction(null); }, action ? 9000 : 3200);
+  }, []);
   const lists = tplFile?.tpl.lists;
 
   // استرجاع القالب المحفوظ
@@ -751,7 +758,26 @@ export default function App() {
   const commitEdit = (src, key, val) => {
     setEditing(null);
     if (val === undefined) return;
+    const row = rows.find((r) => r.src === src);
+    const cell = row?.cells[key];
+    const f = FIELD_BY_KEY[key];
+    // قيمة قائمة غير موجودة/تقريبية: الاختيار ينطبق على كل الصفوف اللي فيها نفس القيمة الأصلية
+    if (cell && f?.type === 'list' && val && cell.raw && !cell.manual && (cell.approx || /غير موجود بقائمة/.test(cell.msg || ''))) {
+      const nk = normKey(cell.raw);
+      const n = rows.filter((r) => !r.excluded && r.cells[key].raw && normKey(r.cells[key].raw) === nk).length;
+      setUserMaps((m) => ({ ...m, [key]: { ...(m[key] || {}), [nk]: val } }));
+      flash(n > 1 ? `"${cell.raw}" ← ${val} · طُبّق على ${n} صف فيها نفس القيمة` : `"${cell.raw}" ← ${val}`);
+      return;
+    }
     setOverrides((o) => ({ ...o, [src]: { ...(o[src] || {}), [key]: val } }));
+    // خانة إلزامية فاضية: عرض تعبئة نفس القيمة لكل الفاضي بنفس العمود
+    if (cell && val && !cell.raw && cell.status === 'error') {
+      const others = rows.filter((r) => !r.excluded && r.src !== src && r.cells[key].status === 'error' && !r.cells[key].raw && overrides[r.src]?.[key] === undefined).length;
+      if (others > 0) {
+        const shown = f?.type === 'date' && isIsoDate(val) ? fmtDate(val) : val;
+        flash(`حُفظ ${f?.label}: ${shown}`, { label: `طبّقها على باقي الفاضي (${others})`, fn: () => setConst(key, val) });
+      }
+    }
   };
   const toggleExclude = (src) => setExcluded((s) => { const n = new Set(s); n.has(src) ? n.delete(src) : n.add(src); return n; });
   const applyMap = (field, nk, val) => { if (!val) return; setUserMaps((m) => ({ ...m, [field]: { ...(m[field] || {}), [nk]: val } })); };
@@ -850,76 +876,6 @@ export default function App() {
 
       {FollowupCard}
 
-      {emptyReq.length > 0 && (
-        <div className="card">
-          <h2>حقول إلزامية فاضية عند أكثر من موظف</h2>
-          <p className="sub">لو القيمة نفسها لكل الفاضيين (مثل بلد الإقامة) عبّها مرة وحدة هنا. الخلايا المعبأة أصلًا ما تتغير.</p>
-          <div className="mapper">
-            {emptyReq.map(([key, n]) => {
-              const f = FIELD_BY_KEY[key];
-              const list = tplFile.tpl.lists[key];
-              return (
-                <div className="mrow" key={key}>
-                  <div><span className="chip gray">{f.label}</span></div>
-                  <div className="raw"><span className="chip error">{n} صف فاضي</span></div>
-                  {list?.length ? (
-                    <select value={fillVals[key] ?? ''} onChange={(e) => setFillVals((v) => ({ ...v, [key]: e.target.value }))}>
-                      <option value="">اختر القيمة…</option>
-                      {list.map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  ) : f.type === 'date' ? (
-                    <DateField value={fillVals[key] ?? ''} onChange={(iso) => setFillVals((v) => ({ ...v, [key]: iso }))} />
-                  ) : (
-                    <input type="text" placeholder={f.type === 'date' ? 'YYYY-MM-DD' : 'القيمة…'} value={fillVals[key] ?? ''} onChange={(e) => setFillVals((v) => ({ ...v, [key]: e.target.value }))} />
-                  )}
-                  <button className="btn small" disabled={!fillVals[key]} onClick={() => { setConst(key, fillVals[key]); flash(`عُبّئ ${f.label}`); }}>تعبئة الفاضي</button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {umCount > 0 && (
-        <div className="card">
-          <h2>قيم غير موجودة بقائمة القالب</h2>
-          <p className="sub">اختر القيمة الصحيحة مرة وحدة وتنطبق على كل الصفوف اللي فيها نفس القيمة.</p>
-          <div className="mapper">
-            {Object.entries(um).flatMap(([field, list]) => list.map((e) => (
-              <div className="mrow" key={field + e.nk}>
-                <div><span className="chip gray">{FIELD_BY_KEY[field].label}</span></div>
-                <div className="raw">"{e.raw}" <span className="chip error">{e.count} صف</span></div>
-                <select defaultValue="" onChange={(ev) => applyMap(field, e.nk, ev.target.value)}>
-                  <option value="">اختر القيمة الصحيحة…</option>
-                  {[...(e.suggestions || []), ...(tplFile.tpl.lists[field] || []).filter((v) => !(e.suggestions || []).includes(v))].map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-                <span className="chip gray">أو أضفه كخيار في قيود ثم نزّل قالبًا جديدًا</span>
-              </div>
-            )))}
-          </div>
-        </div>
-      )}
-
-      {axCount > 0 && (
-        <div className="card">
-          <div className="maphead">
-            <div><h2>مطابقات تقريبية تحتاج تأكيد</h2><p className="sub" style={{ margin: 0 }}>الأداة خمّنت القيمة الأقرب من قائمة القالب. اعتمدها كلها مرة وحدة، أو غيّر أي وحدة.</p></div>
-            <button className="btn small primary" onClick={acceptAllApprox}>اعتماد الكل ({axCount})</button>
-          </div>
-          <div className="mapper">
-            {Object.entries(ax).flatMap(([field, list]) => list.map((e) => (
-              <div className="mrow" key={field + e.nk}>
-                <div><span className="chip gray">{FIELD_BY_KEY[field].label}</span></div>
-                <div className="raw">"{e.raw}" ← {e.value} <span className="chip review">{e.count} صف</span></div>
-                <select value={e.value} onChange={(ev) => applyMap(field, e.nk, ev.target.value)}>
-                  {(tplFile.tpl.lists[field] || []).map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-                <button className="btn small" onClick={() => applyMap(field, e.nk, e.value)}>اعتماد</button>
-              </div>
-            )))}
-          </div>
-        </div>
-      )}
     </>
   );
 
@@ -930,7 +886,7 @@ export default function App() {
           <span className="chip fixed">أزرق = صُحّح تلقائيًا</span>
           <span className="chip review">أصفر = راجعه</span>
           <span className="chip error">أحمر = لازم يتصلح</span>
-          <span className="chip gray">اضغط أي خلية للتعديل · رقم الصف يفتح نموذج الموظف</span>
+          <span className="chip gray">اضغط أي خلية للتعديل · قيمة القائمة الحمراء: اختر الصحيحة وتنطبق على كل الصفوف بنفس القيمة · رقم الصف يفتح نموذج الموظف</span>
           {reviewCells > 0 && (
             <button className="btn small" title="يعتمد كل الخانات الصفراء الحالية كمراجَعة (تقدر تتراجع من نموذج الموظف)" onClick={() => {
               setReviewed((m) => {
@@ -1225,7 +1181,12 @@ export default function App() {
         </div>
       </main>
       {Drawer}
-      {toast && <div className="toast">{toast}</div>}
+      {toast && (
+        <div className="toast">
+          <span>{toast}</span>
+          {toastAction && <button className="btn small primary" onClick={() => { toastAction.fn(); setToast(''); setToastAction(null); }}>{toastAction.label}</button>}
+        </div>
+      )}
     </div>
   );
 }
