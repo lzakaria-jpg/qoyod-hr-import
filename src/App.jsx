@@ -126,6 +126,7 @@ export default function App() {
   const [mapView, setMapView] = useState('simple'); // simple = جدول أعمدة العميل ، detailed = كل حقول قيود
   // بعد "اعتماد" يصير جدول المطابقة نفسه جدول المراجعة والتصحيح (كل الصفوف، قيم منظّفة، تعديل مباشر)
   const [approved, setApproved] = useState(false);
+  const [showIgnored, setShowIgnored] = useState(false);
   // المراجعة
   const [userMaps, setUserMaps] = useState({});
   const [overrides, setOverrides] = useState({});
@@ -901,6 +902,9 @@ export default function App() {
             }}>✓ تمت مراجعة كل الأصفر ({reviewCells})</button>
           )}
         </div>
+        {headers.length > mappedCount && (
+          <label className="switch"><input type="checkbox" checked={showIgnored} onChange={(e) => setShowIgnored(e.target.checked)} />عرض الأعمدة المتجاهلة ({headers.length - mappedCount})</label>
+        )}
       </div>
   );
 
@@ -909,6 +913,8 @@ export default function App() {
   const UnifiedTable = () => {
     const primaryOf = (col) => keysOfCol(col)[0];
     const primary = new Set(headers.map((h) => primaryOf(h.col)).filter(Boolean));
+    // بعد الاعتماد: الأعمدة المتجاهلة مخفية (إلا إذا طلب المستخدم إظهارها)
+    const cols = showIgnored ? headers : headers.filter((h) => primaryOf(h.col));
     const hide = new Set();
     if (primary.has('full_name_ar')) { hide.add('first_name_ar'); hide.add('last_name_ar'); }
     if (primary.has('full_name_en')) { hide.add('first_name'); hide.add('last_name'); }
@@ -929,21 +935,21 @@ export default function App() {
         </td>
       );
     };
-    const total = headers.length + extras.length + 2;
+    const total = cols.length + extras.length + 2;
     return (
-      <div className="maptable-wrap">
+      <div className="maptable-wrap review-wrap">
         <table className="maptable review">
           <thead>
             <tr className="pick">
               <th className="sticky c0" />
               <th className="sticky c1" />
-              {headers.map((h) => <th key={h.col} className={cardState(h.col).cls}><FieldPicker col={h.col} /></th>)}
+              {cols.map((h) => <th key={h.col} className={cardState(h.col).cls}><FieldPicker col={h.col} /></th>)}
               {extras.map((f) => <th key={f.key} className="extra"><span className="nofile">{constants[f.key] ? 'قيمة ثابتة للكل' : 'ليس له عمود بالملف'}</span></th>)}
             </tr>
             <tr className="colname">
               <th className="sticky c0">الصف</th>
               <th className="sticky c1">الحالة</th>
-              {headers.map((h) => {
+              {cols.map((h) => {
                 const st = cardState(h.col);
                 return <th key={h.col} className={st.cls} title={h.text}><span className="nm">{h.text}</span>{st.cls === 'check' && <span className="chip review">تأكد</span>}</th>;
               })}
@@ -957,7 +963,7 @@ export default function App() {
                 <tr key={r.src} className={r.excluded ? 'excluded' : ''}>
                   <td className="sticky c0"><button className="rownum" onClick={() => setDrawerRow(r.src)} title="نموذج الموظف">{r.src}</button></td>
                   <td className="sticky c1"><div className="rowstate"><span className={`chip ${r.status}`}>{r.status === 'ok' ? 'جاهز' : r.status === 'review' ? `مراجعة ${r.reviewCount}` : `خطأ ${r.errorCount}`}</span></div></td>
-                  {headers.map((h) => {
+                  {cols.map((h) => {
                     const k = primaryOf(h.col);
                     if (!k) return <td key={h.col} className="ignored"><div className="cell">{cellText(raw[h.col])}</div></td>;
                     if (k === 'full_name_ar') return nameCell(r, 'first_name_ar', 'last_name_ar', h.col);
