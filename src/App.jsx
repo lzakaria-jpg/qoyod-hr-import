@@ -7,7 +7,7 @@ import {
 import { readTemplate, fillTemplate, buildReport, buildFollowup, followupRows } from './template.js';
 import DateField, { fmtDate } from './DateField.jsx';
 
-const STEPS = ['الملفات', 'مطابقة الأعمدة', 'المراجعة والتصحيح', 'التصدير'];
+const STEPS = ['الملفات', 'المطابقة والمراجعة', 'التصدير'];
 const LS_KEY = 'qhr-import-template-v1';
 const LS_MAPS = 'qhr-import-maps-v1';
 const PAGE = 40;
@@ -123,7 +123,9 @@ export default function App() {
   const [restored, setRestored] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [mapView, setMapView] = useState('simple'); // simple = كروت أعمدة العميل ، detailed = كل حقول قيود
+  const [mapView, setMapView] = useState('simple'); // simple = جدول أعمدة العميل ، detailed = كل حقول قيود
+  // بعد "اعتماد" يصير جدول المطابقة نفسه جدول المراجعة والتصحيح (كل الصفوف، قيم منظّفة، تعديل مباشر)
+  const [approved, setApproved] = useState(false);
   // المراجعة
   const [userMaps, setUserMaps] = useState({});
   const [overrides, setOverrides] = useState({});
@@ -209,7 +211,7 @@ export default function App() {
       const v = { merged: a.merged, mergeNames: a.mergeNames, sheetIdx: a.sheetIdx, hdr: a.hdr };
       setClient({ name: file.name, sheets, mergeNames: a.mergeNames });
       setView(v);
-      setConstants({}); setUserMaps({}); setOverrides({}); setExcluded(new Set());
+      setConstants({}); setUserMaps({}); setOverrides({}); setExcluded(new Set()); setReviewed({}); setApproved(false);
       const sv = applySaved(a.prepared, a.mapping);
       setMapping(sv.mapping); setRestored(sv.restored); setMapTouched(sv.restored);
       if (sv.restored) flash('طُبّقت مطابقة محفوظة سابقًا لملف بنفس الشكل');
@@ -541,7 +543,8 @@ export default function App() {
     <div className="banner ok-banner">✓ كل حقول قيود الإلزامية لها مصدر</div>
   );
 
-  const StepMap = tplFile && client && prepared && (
+  // دالة لا قيمة: تُستدعى عند الرسم بعد تعريف أدوات المراجعة (الفلترة، الخلايا، اللوحات) الموجودة تحت
+  const renderStepMap = () => tplFile && client && prepared && (
     <>
       <div className="card">
         <div className="maphead">
@@ -617,19 +620,44 @@ export default function App() {
               <button className="btn small" onClick={salaryDefaults}>تطبيق الافتراضيات الشائعة</button>
             </div>
           )}
-          <div className="card">
-            <h2 className="title-bar">مطابقة أعمدة الملف</h2>
-            <p className="sub">اختر من كل قائمة حقل قيود المقابل لعمود العميل، أو اتركه "تجاهل". تحت كل قائمة عنوان العمود كما ورد بالملف، وعيّنة من قيمه للتأكيد.</p>
-            {MissingNotice}
-            {MapTable}
-            <div className="maplegend">
-              <span><i className="sw mapped" /> مربوط</span>
-              <span><i className="sw check" /> مربوط — تأكد منه</span>
-              <span><i className="sw ignored" /> متجاهَل</span>
-              <span className="muted">عرض أول {previewRows.length} صفوف من {prepared.data.length}</span>
-            </div>
-          </div>
-          {MissingRequired}
+          {!approved && (
+            <>
+              <div className="card">
+                <h2 className="title-bar">مطابقة أعمدة الملف</h2>
+                <p className="sub">اختر من كل قائمة حقل قيود المقابل لعمود العميل، أو اتركه "تجاهل". تحت كل قائمة عنوان العمود كما ورد بالملف، وعيّنة من قيمه للتأكيد. لما تخلص اضغط <b>اعتماد</b> وتتحول نفس الصفحة للمراجعة والتصحيح.</p>
+                {MissingNotice}
+                {MapTable}
+                <div className="maplegend">
+                  <span><i className="sw mapped" /> مربوط</span>
+                  <span><i className="sw check" /> مربوط — تأكد منه</span>
+                  <span><i className="sw ignored" /> متجاهَل</span>
+                  <span className="muted">عرض أول {previewRows.length} صفوف من {prepared.data.length}</span>
+                </div>
+              </div>
+              {MissingRequired}
+            </>
+          )}
+          {approved && (
+            <>
+              {ReviewPanels}
+              <div className="card">
+                <div className="maphead">
+                  <div>
+                    <h2 className="title-bar">مطابقة ومراجعة البيانات</h2>
+                    <p className="sub" style={{ margin: 0 }}>نفس جدول المطابقة بعد الاعتماد: كل الموظفين، القيم منظّفة ومفحوصة. اضغط أي خلية لتعديلها، ورقم الصف يفتح نموذج الموظف. تقدر تغيّر أي قائمة فوق وتتحدث البيانات فورًا.</p>
+                  </div>
+                </div>
+                {MissingNotice}
+                {ReviewToolbar}
+                {UnifiedTable()}
+                <div className="pager">
+                  <button className="btn small" disabled={curPage === 0} onClick={() => setPage(curPage - 1)}>السابق</button>
+                  <span>صفحة {curPage + 1} من {pages} · {filtered.length} صف</span>
+                  <button className="btn small" disabled={curPage >= pages - 1} onClick={() => setPage(curPage + 1)}>التالي</button>
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
       {mapView === 'detailed' && (
@@ -669,7 +697,16 @@ export default function App() {
       )}
       <div className="actions">
         <button className="btn" onClick={() => setStep(0)}>رجوع</button>
-        <div className="right"><button className="btn primary" disabled={!records.length} onClick={() => { saveProfile(); setPage(0); setStep(2); }}>التالي: المراجعة ({records.length} موظف)</button></div>
+        <div className="right">
+          {!approved ? (
+            <button className="btn primary" disabled={!records.length} onClick={approve}>✓ اعتماد ({records.length} موظف)</button>
+          ) : (
+            <>
+              <button className="btn" onClick={() => { setApproved(false); window.scrollTo({ top: 0 }); }}>عرض العيّنة فقط</button>
+              <button className="btn primary" onClick={() => setStep(2)}>التالي: التصدير ({exportable.length} جاهز)</button>
+            </>
+          )}
+        </div>
       </div>
     </>
   );
@@ -766,7 +803,7 @@ export default function App() {
         <FileButton label="رفع الملف بعد تعبئة العميل" accept=".xlsx" onFile={loadFollowup} />
         <label className="switch"><input type="checkbox" checked={fuReview} onChange={(e) => setFuReview(e.target.checked)} />ضمّن الخانات اللي تحتاج تأكيد (أسماء مترجمة، هوية منتهية…)</label>
       </div>
-      {err && step === 2 && <div className="banner err">{err}</div>}
+      {err && step === 1 && <div className="banner err">{err}</div>}
     </div>
   );
 
@@ -793,7 +830,15 @@ export default function App() {
     );
   };
 
-  const StepReview = tplFile && (
+  const approve = () => {
+    saveProfile();
+    setApproved(true); setMapView('simple'); setFilter('all'); setPage(0);
+    window.scrollTo({ top: 0 });
+    flash('اعتُمدت المطابقة — راجع وصحّح البيانات بنفس الجدول');
+  };
+
+  // لوحات المراجعة (تظهر فوق الجدول بعد الاعتماد)
+  const ReviewPanels = tplFile && (
     <>
       <div className="stats">
         <button className={`stat ${filter === 'all' ? 'on' : ''}`} onClick={() => { setFilter('all'); setPage(0); }}><b>{counts.all}</b><span>إجمالي الصفوف</span></button>
@@ -875,7 +920,10 @@ export default function App() {
           </div>
         </div>
       )}
+    </>
+  );
 
+  const ReviewToolbar = (
       <div className="toolbar">
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="text" className="search" placeholder="بحث بالاسم أو الهوية أو الرقم الوظيفي…" value={query} onChange={(e) => { setQuery(e.target.value); setPage(0); }} />
@@ -897,41 +945,79 @@ export default function App() {
             }}>✓ تمت مراجعة كل الأصفر ({reviewCells})</button>
           )}
         </div>
-        <label className="switch"><input type="checkbox" checked={showAllCols} onChange={(e) => setShowAllCols(e.target.checked)} />عرض كل الأعمدة</label>
       </div>
+  );
 
-      <div className="tablewrap">
-        <table className="dt">
+  // الجدول الموحّد بعد الاعتماد: نفس صفّي المطابقة فوق (قائمة الحقل + عنوان عمود العميل)، وتحتها كل الصفوف بقيمها النهائية
+  const srcIndex = useMemo(() => new Map((prepared?.src || []).map((s, i) => [String(s), i])), [prepared]);
+  const UnifiedTable = () => {
+    const primaryOf = (col) => keysOfCol(col)[0];
+    const primary = new Set(headers.map((h) => primaryOf(h.col)).filter(Boolean));
+    const hide = new Set();
+    if (primary.has('full_name_ar')) { hide.add('first_name_ar'); hide.add('last_name_ar'); }
+    if (primary.has('full_name_en')) { hide.add('first_name'); hide.add('last_name'); }
+    // حقول قيود بدون عمود بملف العميل لكنها تهم: الإلزامي، أو المثبّت بقيمة، أو اللي عليه ملاحظات
+    const extras = FIELDS.filter((f) => !primary.has(f.key) && !hide.has(f.key)
+      && (tplFile.tpl.required.has(f.key) || constants[f.key] || rows.some((r) => !r.excluded && ['error', 'review'].includes(r.cells[f.key].status))));
+    const RANK = { error: 3, review: 2, fixed: 1, ok: 0, empty: 0 };
+    const nameCell = (r, a, b, key) => {
+      const ca = r.cells[a], cb = r.cells[b];
+      const st = RANK[ca.status] >= RANK[cb.status] ? ca.status : cb.status;
+      const tip = [ca.msg, cb.msg].filter(Boolean).join('\n');
+      return (
+        <td key={key}>
+          <div className={`cell ${st}`} title={tip ? `${tip}\nاضغط لتعديل الاسم` : 'اضغط لتعديل الاسم'} onClick={() => setDrawerRow(r.src)}>
+            {['fixed', 'review', 'error'].includes(st) && <i className="dot" />}
+            <span>{`${ca.value || ''} ${cb.value || ''}`.trim() || '—'}</span>
+          </div>
+        </td>
+      );
+    };
+    const total = headers.length + extras.length + 2;
+    return (
+      <div className="maptable-wrap">
+        <table className="maptable review">
           <thead>
-            <tr>
+            <tr className="pick">
+              <th className="sticky c0" />
+              <th className="sticky c1" />
+              {headers.map((h) => <th key={h.col} className={cardState(h.col).cls}><FieldPicker col={h.col} /></th>)}
+              {extras.map((f) => <th key={f.key} className="extra"><span className="nofile">{constants[f.key] ? 'قيمة ثابتة للكل' : 'ليس له عمود بالملف'}</span></th>)}
+            </tr>
+            <tr className="colname">
               <th className="sticky c0">الصف</th>
-              <th className="sticky c1">حالة</th>
-              {visibleFields.map((f) => <th key={f.key}>{f.label}{f.req ? ' *' : ''}</th>)}
+              <th className="sticky c1">الحالة</th>
+              {headers.map((h) => {
+                const st = cardState(h.col);
+                return <th key={h.col} className={st.cls} title={h.text}><span className="nm">{h.text}</span>{st.cls === 'check' && <span className="chip review">تأكد</span>}</th>;
+              })}
+              {extras.map((f) => <th key={f.key} className="extra" title={f.label}><span className="nm">{f.label}{tplFile.tpl.required.has(f.key) ? ' *' : ''}</span></th>)}
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((r) => (
-              <tr key={r.src} className={r.excluded ? 'excluded' : ''}>
-                <td className="sticky c0"><button className="rownum" onClick={() => setDrawerRow(r.src)} title="تفاصيل الصف">{r.src}</button></td>
-                <td className="sticky c1"><div className="rowstate"><span className={`chip ${r.status}`}>{r.status === 'ok' ? 'جاهز' : r.status === 'review' ? `مراجعة ${r.reviewCount}` : `خطأ ${r.errorCount}`}</span></div></td>
-                {visibleFields.map((f) => renderCell(r, f))}
-              </tr>
-            ))}
-            {!pageRows.length && <tr><td colSpan={visibleFields.length + 2}><div className="empty">لا توجد صفوف بهذا التصفية</div></td></tr>}
+            {pageRows.map((r) => {
+              const raw = prepared.data[srcIndex.get(String(r.src))] || [];
+              return (
+                <tr key={r.src} className={r.excluded ? 'excluded' : ''}>
+                  <td className="sticky c0"><button className="rownum" onClick={() => setDrawerRow(r.src)} title="نموذج الموظف">{r.src}</button></td>
+                  <td className="sticky c1"><div className="rowstate"><span className={`chip ${r.status}`}>{r.status === 'ok' ? 'جاهز' : r.status === 'review' ? `مراجعة ${r.reviewCount}` : `خطأ ${r.errorCount}`}</span></div></td>
+                  {headers.map((h) => {
+                    const k = primaryOf(h.col);
+                    if (!k) return <td key={h.col} className="ignored"><div className="cell">{cellText(raw[h.col])}</div></td>;
+                    if (k === 'full_name_ar') return nameCell(r, 'first_name_ar', 'last_name_ar', h.col);
+                    if (k === 'full_name_en') return nameCell(r, 'first_name', 'last_name', h.col);
+                    return <React.Fragment key={h.col}>{renderCell(r, FIELD_BY_KEY[k])}</React.Fragment>;
+                  })}
+                  {extras.map((f) => <React.Fragment key={f.key}>{renderCell(r, f)}</React.Fragment>)}
+                </tr>
+              );
+            })}
+            {!pageRows.length && <tr><td colSpan={total}><div className="empty">لا توجد صفوف بهذا التصفية</div></td></tr>}
           </tbody>
         </table>
       </div>
-      <div className="pager">
-        <button className="btn small" disabled={curPage === 0} onClick={() => setPage(curPage - 1)}>السابق</button>
-        <span>صفحة {curPage + 1} من {pages} · {filtered.length} صف</span>
-        <button className="btn small" disabled={curPage >= pages - 1} onClick={() => setPage(curPage + 1)}>التالي</button>
-      </div>
-      <div className="actions">
-        <button className="btn" onClick={() => setStep(1)}>رجوع للمطابقة</button>
-        <div className="right"><button className="btn primary" onClick={() => setStep(3)}>التالي: التصدير</button></div>
-      </div>
-    </>
-  );
+    );
+  };
 
   /* --------------------------- الخطوة 4 --------------------------- */
   const doExport = async (force = false) => {
@@ -976,7 +1062,7 @@ export default function App() {
     }
     return [...m.values()].sort((a, b) => b.n - a.n);
   }, [rows]);
-  const goFixErrors = () => { setFilter('error'); setPage(0); setStep(2); };
+  const goFixErrors = () => { setFilter('error'); setPage(0); setApproved(true); setMapView('simple'); setStep(1); };
 
   const StepExport = tplFile && client && (
     <>
@@ -1008,7 +1094,7 @@ export default function App() {
         {exportable.length > tplFile.tpl.maxRows && <div className="banner info">القالب يدعم {tplFile.tpl.maxRows} صفًا بالملف، فبينقسم لعدة ملفات.</div>}
         {err && <div className="banner err">{err}</div>}
         <div className="actions">
-          <button className="btn" onClick={() => setStep(2)}>رجوع للمراجعة</button>
+          <button className="btn" onClick={() => setStep(1)}>رجوع للمراجعة</button>
           <div className="right">
             <button className="btn" disabled={busy || !rows.length} onClick={doReport}>تنزيل تقرير الملاحظات</button>
             <button className="btn primary" disabled={busy || !exportable.length} onClick={() => doExport(false)}>{busy ? 'جارٍ التجهيز…' : `تنزيل ملف الرفع (${exportable.length})`}</button>
@@ -1095,14 +1181,13 @@ export default function App() {
     </>
   );
 
-  const stepOK = [true, !!tplFile && !!client, !!records.length, !!records.length];
+  const stepOK = [true, !!tplFile && !!client && !!records.length && approved];
   const STEP_SUB = [
     'ارفع قالب قيود الرسمي وملف العميل كما هو',
-    'وين يروح كل عمود من ملف العميل بقالب قيود',
-    'صحّح الأخطاء واعتمد الملاحظات قبل الرفع',
+    approved ? 'صحّح الأخطاء واعتمد الملاحظات بنفس جدول المطابقة' : 'وين يروح كل عمود من ملف العميل بقالب قيود، ثم اعتماد',
     'نزّل ملف الرفع الجاهز لقيود والتقارير',
   ];
-  const STEP_ICON = [ICONS.upload, 'M4 6h7M4 12h7M4 18h7M15 6l5 6-5 6', ICONS.check, ICONS.down];
+  const STEP_ICON = [ICONS.upload, 'M4 6h7M4 12h7M4 18h7M15 6l5 6-5 6', ICONS.down];
   return (
     <div className="shell">
       <aside className="side">
@@ -1112,7 +1197,7 @@ export default function App() {
             <button key={s} className={`side-item ${i === step ? 'on' : ''} ${i < step ? 'done' : ''}`} disabled={i > step && !stepOK[i - 1]} onClick={() => setStep(i)}>
               <Icon d={i < step ? ICONS.check : STEP_ICON[i]} size={18} />
               <span>{s}</span>
-              {i === 2 && rows.length > 0 && counts.error > 0 && <em className="badge">{counts.error}</em>}
+              {i === 1 && approved && rows.length > 0 && counts.error > 0 && <em className="badge">{counts.error}</em>}
             </button>
           ))}
         </nav>
@@ -1135,9 +1220,8 @@ export default function App() {
         </header>
         <div className="content">
           {step === 0 && StepFiles}
-          {step === 1 && StepMap}
-          {step === 2 && StepReview}
-          {step === 3 && StepExport}
+          {step === 1 && renderStepMap()}
+          {step === 2 && StepExport}
         </div>
       </main>
       {Drawer}

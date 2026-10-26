@@ -216,6 +216,18 @@ table.maptable { border-collapse: separate; border-spacing: 0; width: max-conten
 .maptable tr.colname th.check { background: #fff1b8; color: var(--text); }
 .maptable td.ignored { color: var(--muted); }
 .maptable tr.pick th.check select { border-color: var(--review-line); }
+/* جدول المراجعة الموحّد: الخلايا قابلة للتعديل وبلون حالتها، وعمودا الصف/الحالة ثابتين */
+.maptable.review td { padding: 0; }
+.maptable.review td.ignored .cell { color: var(--muted); cursor: default; }
+.maptable.review tbody td.mapped, .maptable.review tbody td.check { background: transparent; }
+.maptable .sticky { position: sticky; z-index: 2; background: var(--surface); }
+.maptable thead .sticky { z-index: 4; background: var(--surface-2); }
+.maptable .c0 { inset-inline-start: 0; min-width: 56px; max-width: 56px; text-align: center; }
+.maptable .c1 { inset-inline-start: 56px; min-width: 84px; max-width: 84px; text-align: center; box-shadow: inset -1px 0 0 var(--border); }
+.maptable th.extra { background: #f0f7ff; }
+.maptable tr.colname th.extra { background: #e6f4ff; color: var(--text); }
+.maptable .nofile { display: block; font-size: 11.5px; color: var(--fixed); text-align: center; padding: 8px 0; }
+.maptable tr.excluded td { opacity: 0.4; }
 .maplegend { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
 .maplegend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-inline-end: 4px; border: 1px solid var(--border-strong); }
 .maplegend .sw.mapped { background: #e9edf4; } .maplegend .sw.check { background: #fff1b8; } .maplegend .sw.ignored { background: #fff; }
