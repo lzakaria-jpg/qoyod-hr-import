@@ -153,7 +153,7 @@ export default function App() {
   const flash = useCallback((m, action = null) => {
     setToast(m); setToastAction(action);
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => { setToast(''); setToastAction(null); }, action ? 9000 : 3200);
+    toastTimer.current = setTimeout(() => { setToast(''); setToastAction(null); }, action ? 15000 : 3200);
   }, []);
   const lists = tplFile?.tpl.lists;
 
@@ -622,12 +622,6 @@ export default function App() {
 
       {mapView === 'simple' && (
         <>
-          {mapping.salary_basic_salary_amount && (!constants.salary_pay_frequency || !constants.salary_basic_salary_kind) && !mapping.salary_pay_frequency && (
-            <div className="banner info" style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span>الراتب موجود لكن دورية الدفع ونوعه وتاريخ بدئه غير محددة.</span>
-              <button className="btn small" onClick={salaryDefaults}>تطبيق الافتراضيات الشائعة</button>
-            </div>
-          )}
           {!approved && (
             <>
               <div className="card">
@@ -680,12 +674,6 @@ export default function App() {
           </div>
         </div>
         {missingRequired.length > 0 && <div className="banner warn">حقول إلزامية بدون مصدر: {missingRequired.map((k) => FIELD_BY_KEY[k].label).join('، ')}. تقدر تكمل وتعبّيها بالمراجعة، أو تثبّت لها قيمة.</div>}
-        {mapping.salary_basic_salary_amount && (!constants.salary_pay_frequency || !constants.salary_basic_salary_kind) && !mapping.salary_pay_frequency && (
-          <div className="banner info" style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span>الراتب موجود لكن دورية الدفع ونوعه وأساس الوقت وتاريخ البدء غير محددة.</span>
-            <button className="btn small" onClick={salaryDefaults}>تطبيق الافتراضيات الشائعة</button>
-          </div>
-        )}
         {unusedCols.length > 0 && (
           <div className="unused">
             <span className="sub" style={{ margin: 0 }}>أعمدة العميل غير المستخدمة ({unusedCols.length}):</span>
@@ -773,10 +761,18 @@ export default function App() {
     setOverrides((o) => ({ ...o, [src]: { ...(o[src] || {}), [key]: val } }));
     // خانة إلزامية فاضية: عرض تعبئة نفس القيمة لكل الفاضي بنفس العمود
     if (cell && val && !cell.raw && cell.status === 'error') {
-      const others = rows.filter((r) => !r.excluded && r.src !== src && r.cells[key].status === 'error' && !r.cells[key].raw && overrides[r.src]?.[key] === undefined).length;
-      if (others > 0) {
+      // فقط الخانات الحمراء الفاضية بنفس العمود (مثلًا نهاية العقد لغير السعوديين، لا للسعوديين اللي ما يحتاجونها)
+      const targets = rows.filter((r) => !r.excluded && r.src !== src && r.cells[key].status === 'error' && !r.cells[key].raw && overrides[r.src]?.[key] === undefined).map((r) => r.src);
+      if (targets.length > 0) {
         const shown = f?.type === 'date' && isIsoDate(val) ? fmtDate(val) : val;
-        flash(`حُفظ ${f?.label}: ${shown}`, { label: `طبّقها على باقي الفاضي (${others})`, fn: () => setConst(key, val) });
+        flash(`حُفظ ${f?.label}: ${shown}`, {
+          label: `طبّقها على باقي الفاضي المطلوب (${targets.length})`,
+          fn: () => setOverrides((o) => {
+            const n = { ...o };
+            for (const s of targets) n[s] = { ...(n[s] || {}), [key]: val };
+            return n;
+          }),
+        });
       }
     }
   };

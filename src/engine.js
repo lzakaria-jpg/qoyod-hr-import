@@ -714,11 +714,17 @@ export function cleanPhone(raw, { addCC }) {
   s = s.replace(/[()\-.\s\/]/g, '');
   if (s.startsWith('00')) s = '+' + s.slice(2);
   if (addCC) {
-    if (/^05\d{8}$/.test(s)) s = '+966' + s.slice(1);
+    if (/^0[1-9]\d{8}$/.test(s)) s = '+966' + s.slice(1); // جوال 05… أو هاتف ثابت 01…
     else if (/^5\d{8}$/.test(s)) s = '+966' + s;
-    else if (/^9665\d{8}$/.test(s)) s = '+' + s;
+    else if (/^966[1-9]\d{8}$/.test(s)) s = '+' + s;
   }
   if (!/^\+?\d{7,15}$/.test(s)) return { status: 'error', msg: `رقم هاتف غير صالح: "${orig}"` };
+  // جوال سعودي بطول خاطئ: قيود يرفضه ("Work phone number is invalid")
+  if (/^(05|5|9665|\+9665)/.test(s) && !/^(05\d{8}|5\d{8}|9665\d{8}|\+9665\d{8})$/.test(s)) {
+    return { value: s, status: 'error', msg: `رقم جوال سعودي ناقص أو زائد (${s.replace(/^\+?966/, '0').length} خانات بدل 10): "${orig}"` };
+  }
+  // مع خيار +966: قيود يحتاج الرقم الدولي الكامل
+  if (addCC && !/^\+\d{9,15}$/.test(s)) return { value: s, status: 'error', msg: `رقم غير مكتمل لقيود (المطلوب رقم دولي مثل +9665XXXXXXXX): "${orig}"` };
   let status = s === orig ? 'ok' : 'fixed', msg = status === 'fixed' ? 'إزالة الفواصل/توحيد الأرقام' : undefined;
   if (multi) msg = `الخلية فيها ${parts.length} أرقام، أُخذ الأول`;
   if (typeof raw === 'number' && /^5\d{8}$/.test(s)) { status = 'review'; msg = 'الرقم يبدو ناقصًا الصفر الأول (جوال سعودي من 9 خانات)'; }
@@ -962,11 +968,30 @@ export function processRecords(records, ctx) {
         }
       }
     }
+    // قيم افتراضية يحتاجها قيود (تُعلَّم "مُصحَّح" مع السبب، والتعديل اليدوي يتقدّم عليها)
+    const auto = {};
+    const has = (k) => { const v = ovs[k] !== undefined ? ovs[k] : vals[k]; return v !== undefined && v !== null && clean(cellText(v)) !== ''; };
+    const inList = (k, want) => (lists[k] || []).find((v) => normKey(v) === normKey(want));
+    const setAuto = (k, v, msg) => { if (v !== undefined && v !== null && v !== '' && !has(k)) { vals[k] = v; auto[k] = msg; } };
+    if (has('salary_basic_salary_amount') && settings.salaryDefaults !== false) {
+      // قيود يرفض راتبًا بدون تاريخ بدء ("Start date can't be blank")
+      if (has('join_date')) setAuto('salary_start_date', ovs.join_date !== undefined ? ovs.join_date : vals.join_date, 'افتراضي: تاريخ بدء الراتب = تاريخ الانضمام');
+      setAuto('salary_pay_frequency', inList('salary_pay_frequency', 'Monthly'), 'افتراضي: الدفع شهري');
+      setAuto('salary_basic_salary_kind', inList('salary_basic_salary_kind', 'Fixed'), 'افتراضي: راتب ثابت');
+      setAuto('salary_input_time_type', (lists.salary_input_time_type || [])[0], `افتراضي: ${(lists.salary_input_time_type || [])[0] || ''}`);
+    }
+    // عقد له تاريخ نهاية بدون نوع: قيود يعتبر الفاضي "غير محدد المدة" ويرفض تاريخ النهاية، فنحدده "محدد المدة"
+    if (has('contract_end_date')) setAuto('contract_type', inList('contract_type', 'محدد المدة'), 'للعقد تاريخ نهاية ← محدد المدة');
+
     const cells = {};
     for (const f of FIELDS) {
       const ov = ovs[f.key];
       const raw = ov !== undefined ? ov : vals[f.key];
       cells[f.key] = processCell(f, raw, ov !== undefined);
+      if (auto[f.key] && cells[f.key].status !== 'error') {
+        const c = cells[f.key];
+        c.status = 'fixed'; c.msg = auto[f.key]; c.notes = [{ status: 'fixed', msg: auto[f.key] }]; c.auto = true; c.raw = '';
+      }
       const n = note[f.key];
       if (n && cells[f.key].status !== 'error') {
         const c = cells[f.key];
@@ -1086,6 +1111,11 @@ export function processRecords(records, ctx) {
     // العقد لغير السعوديين
     if (nat && !isSaudi && !c.contract_end_date.value) setIssue(row, 'contract_end_date', 'error', 'مطلوب لغير السعوديين حسب القالب');
     if (v('contract_type') && normKey(v('contract_type')) === normKey('محدد المدة') && !c.contract_end_date.value && isSaudi) setIssue(row, 'contract_end_date', 'review', 'عقد محدد المدة بدون تاريخ نهاية');
+    // شرط قيود: العقد غير محدد المدة لا يقبل تاريخ نهاية
+    if (v('contract_type') && normKey(v('contract_type')) === normKey('غير محدد المدة') && c.contract_end_date.value) {
+      setIssue(row, 'contract_end_date', 'error', 'يجب أن يكون فارغًا لأن العقد "غير محدد المدة" (شرط قيود): احذف التاريخ أو غيّر نوع العقد');
+    }
+    if (c.contract_type.auto && isSaudi) setIssue(row, 'contract_type', 'review', 'موظف سعودي بعقد "محدد المدة" لأن له تاريخ نهاية — تأكد، أو احذف تاريخ النهاية ليصير غير محدد المدة');
     // الراتب
     const SAL = ['salary_start_date', 'salary_pay_frequency', 'salary_basic_salary_kind', 'salary_input_time_type'];
     if (c.salary_basic_salary_amount.value) {

@@ -2,3 +2,5 @@ node_modules/
 dist/
 .claude/
 *.log
+test/real/
+test/demo_check.mjs

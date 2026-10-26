@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node test/engine.test.mjs && node test/accuracy.test.mjs",
+    "test": "node test/engine.test.mjs && node test/accuracy.test.mjs && node test/qoyod_rules.test.mjs",
     "fixtures": "cd test && python -I make_template.py --rich template_rich.xlsx && node make_fixtures.mjs"
   },
   "dependencies": {
