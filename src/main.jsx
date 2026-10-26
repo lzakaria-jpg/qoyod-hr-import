@@ -1,0 +1,15 @@
+import '@fontsource/cairo/arabic-300.css';
+import '@fontsource/cairo/latin-300.css';
+import '@fontsource/cairo/arabic-400.css';
+import '@fontsource/cairo/latin-400.css';
+import '@fontsource/cairo/arabic-500.css';
+import '@fontsource/cairo/latin-500.css';
+import '@fontsource/cairo/arabic-600.css';
+import '@fontsource/cairo/latin-600.css';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App.jsx';
+import './styles.css';
+document.documentElement.dir = 'rtl';
+document.documentElement.lang = 'ar';
+createRoot(document.getElementById('root')).render(<App />);
