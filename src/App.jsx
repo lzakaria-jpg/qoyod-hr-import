@@ -122,6 +122,8 @@ export default function App() {
   const [fuReview, setFuReview] = useState(true);
   const [restored, setRestored] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [mapView, setMapView] = useState('simple'); // simple = كروت أعمدة العميل ، detailed = كل حقول قيود
   // المراجعة
   const [userMaps, setUserMaps] = useState({});
   const [overrides, setOverrides] = useState({});
@@ -428,19 +430,117 @@ export default function App() {
     </div>
   );
 
+  /* ---- العرض المبسّط: كرت لكل عمود بملف العميل ---- */
+  const keysOfCol = (col) => Object.entries(mapping).filter(([, m]) => m.col === col).map(([k]) => k);
+  const setColField = (col, key) => {
+    setMapTouched(true);
+    setMapping((m) => {
+      const n = {};
+      for (const [k, v] of Object.entries(m)) if (v.col !== col) n[k] = v;
+      if (key) n[key] = { col, score: 1, by: 'manual' };
+      return n;
+    });
+  };
+  const labelOf = (k) => (FIELD_BY_KEY[k] || VIRTUAL_FIELDS.find((v) => v.key === k))?.label || k;
+  const cardState = (col) => {
+    const ks = keysOfCol(col);
+    if (!ks.length) return { cls: 'ignored', tag: 'متجاهَل' };
+    const m = mapping[ks[0]];
+    if (m.by === 'content') return { cls: 'check', tag: 'من المحتوى — تأكد' };
+    if (m.by === 'header' && m.score < 0.9) return { cls: 'check', tag: 'تقريبي — تأكد' };
+    if (m.by === 'manual') return { cls: 'mapped', tag: 'اخترته أنت' };
+    if (m.by === 'saved') return { cls: 'mapped', tag: 'مطابقة محفوظة' };
+    return { cls: 'mapped', tag: 'تلقائي' };
+  };
+  const ConstEditor = ({ f }) => {
+    const list = tplFile.tpl.lists[f.key];
+    if (list?.length) return (
+      <select value={constants[f.key] ?? ''} onChange={(e) => setConst(f.key, e.target.value)}>
+        <option value="">اختر قيمة للكل…</option>
+        {list.map((v) => <option key={v} value={v}>{v}</option>)}
+      </select>
+    );
+    if (f.type === 'date') return <DateField value={constants[f.key] ?? ''} placeholder="تاريخ للكل…" onChange={(iso) => setConst(f.key, iso)} />;
+    return <input type="text" placeholder="قيمة للكل…" defaultValue={constants[f.key] ?? ''} key={constants[f.key] ?? ''} onBlur={(e) => setConst(f.key, e.target.value.trim())} />;
+  };
+  const mappedCount = headers.filter((h) => keysOfCol(h.col).length).length;
+  const ColumnCards = (
+    <div className="colgrid">
+      {headers.map((h) => {
+        const ks = keysOfCol(h.col);
+        const st = cardState(h.col);
+        const samples = columnSample(prepared, h.col, 3);
+        return (
+          <div key={h.col} className={`colcard ${st.cls}`}>
+            <div className="colcard-head">
+              <b title={h.text}>{h.text}</b>
+              <span className="tag">{st.tag}</span>
+            </div>
+            <div className="samples">
+              {samples.length ? samples.map((s, i) => <div key={i} dir="auto" title={s}>{s}</div>) : <div className="muted">— فاضي —</div>}
+            </div>
+            <div className="arrow">↓ يروح إلى</div>
+            <select value={ks[0] || ''} onChange={(e) => setColField(h.col, e.target.value)}>
+              <option value="">— تجاهل هذا العمود —</option>
+              <optgroup label="الاسم الكامل (يُقسَّم تلقائيًا)">
+                {VIRTUAL_FIELDS.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
+              </optgroup>
+              {Object.entries(GROUPS).map(([g, gl]) => (
+                <optgroup key={g} label={gl}>
+                  {FIELDS.filter((f) => f.group === g).map((f) => {
+                    const other = mapping[f.key] && mapping[f.key].col !== h.col;
+                    return <option key={f.key} value={f.key}>{f.label}{tplFile.tpl.required.has(f.key) ? ' *' : ''}{other ? ' (مربوط بعمود آخر)' : ''}</option>;
+                  })}
+                </optgroup>
+              ))}
+            </select>
+            {ks.length > 1 && <div className="extra">وكمان: {ks.slice(1).map((k) => <span key={k} className="chip gray">{labelOf(k)} <button className="x" onClick={() => setMapping((m) => { const n = { ...m }; delete n[k]; return n; })} aria-label="إزالة">×</button></span>)}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+  const MissingRequired = missingRequired.length > 0 ? (
+    <div className="card">
+      <h2>حقول قيود الإلزامية الناقصة ({missingRequired.length})</h2>
+      <p className="sub">ملف العميل ما فيه عمود لها. اختر لها عمود من الكروت فوق، أو ثبّت قيمة وحدة لكل الموظفين هنا (وتقدر تعدّلها لكل موظف بالمراجعة).</p>
+      <div className="missgrid">
+        {missingRequired.map((k) => (
+          <div key={k} className="missrow">
+            <b>{FIELD_BY_KEY[k].label}</b>
+            <ConstEditor f={FIELD_BY_KEY[k]} />
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <div className="banner ok-banner">✓ كل حقول قيود الإلزامية لها مصدر</div>
+  );
+
   const StepMap = tplFile && client && prepared && (
     <>
       <div className="card">
         <div className="maphead">
           <div>
-            <h2>إعدادات القراءة</h2>
-            <p className="sub" style={{ margin: 0 }}>الأداة اختارت الشيت والترويسة تلقائيًا، عدّل إذا لزم.</p>
+            <h2>مطابقة ملف العميل مع قالب قيود</h2>
+            <p className="sub" style={{ margin: 0 }}>
+              قرأنا <b>{prepared.data.length}</b> موظف من {view.merged ? `الشيتات (${view.mergeNames.join(' + ')})` : `شيت "${client.sheets[view.sheetIdx]?.name}"`}
+              {view.merged ? '' : view.hdr.idx < 0 ? ' — بدون ترويسة' : ` — الترويسة بالصف ${view.hdr.idx + 1}`}.
+              {' '}راجع وين يروح كل عمود، وعدّل إذا لزم.
+            </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {!view.merged && <button className="btn small" onClick={() => setShowRaw((x) => !x)}>{showRaw ? 'إخفاء' : 'عرض'} الملف الخام</button>}
-            <button className="btn small" onClick={() => remap(prepared)}>إعادة المطابقة التلقائية</button>
+            <button className={`btn small ${showSettings ? 'primary' : ''}`} onClick={() => setShowSettings((x) => !x)}>⚙ إعدادات القراءة</button>
+            <button className="btn small" onClick={() => setMapView((v) => (v === 'simple' ? 'detailed' : 'simple'))}>{mapView === 'simple' ? 'عرض تفصيلي (كل حقول قيود)' : 'العرض المبسّط'}</button>
           </div>
         </div>
+        <div className="mapsummary">
+          <span className="chip ok">{mappedCount} عمود مربوط</span>
+          <span className="chip gray">{headers.length - mappedCount} متجاهَل</span>
+          <span className={`chip ${missingRequired.length ? 'error' : 'ok'}`}>الإلزامي: {requiredKeys.length - missingRequired.length} / {requiredKeys.length}</span>
+          {Object.values(mapping).some((m) => m.by === 'content' || (m.by === 'header' && m.score < 0.9)) && <span className="chip review">الأصفر: تأكد منه</span>}
+        </div>
+        {showSettings && (
         <div className="settings" style={{ marginTop: 12 }}>
           <div className="field"><label>الشيت</label>
             <select value={view.merged ? 'merged' : view.sheetIdx} onChange={(e) => {
@@ -470,9 +570,14 @@ export default function App() {
           </div>
           <label className="switch"><input type="checkbox" checked={settings.addCC} onChange={(e) => setSettings((s) => ({ ...s, addCC: e.target.checked }))} />أضف +966 للجوالات السعودية المحلية (05…)</label>
           <label className="switch"><input type="checkbox" checked={settings.translit !== false} onChange={(e) => setSettings((s) => ({ ...s, translit: e.target.checked }))} />ترجمة حرفية للاسم الناقص (عربي ⇄ إنجليزي)</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {!view.merged && <button className="btn small" onClick={() => setShowRaw((x) => !x)}>{showRaw ? 'إخفاء' : 'عرض'} الملف الخام</button>}
+            <button className="btn small" onClick={() => remap(prepared)}>إعادة المطابقة التلقائية</button>
+          </div>
         </div>
-        {showRaw && !view.merged && <><p className="sub" style={{ margin: '12px 0 6px' }}>أول 18 صفًا كما هي بالملف — اضغط أي صف لتجعله الترويسة.</p>{RawPreview}</>}
-        {prepared.skipped.length > 0 && (
+        )}
+        {showSettings && showRaw && !view.merged && <><p className="sub" style={{ margin: '12px 0 6px' }}>أول 18 صفًا كما هي بالملف — اضغط أي صف لتجعله الترويسة.</p>{RawPreview}</>}
+        {showSettings && prepared.skipped.length > 0 && (
           <details className="skipped">
             <summary>تجاهلت الأداة {prepared.skipped.length} صفًا غير بيانات (عناوين أقسام، ترويسة مكررة، إجماليات، ملاحظات)</summary>
             <ul>{prepared.skipped.slice(0, 40).map((s, i) => <li key={i}><b>صف {s.src}</b> — {s.reason}{s.text ? `: ${s.text}` : ''}</li>)}</ul>
@@ -480,9 +585,26 @@ export default function App() {
         )}
       </div>
 
+      {mapView === 'simple' && (
+        <>
+          {mapping.salary_basic_salary_amount && (!constants.salary_pay_frequency || !constants.salary_basic_salary_kind) && !mapping.salary_pay_frequency && (
+            <div className="banner info" style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span>الراتب موجود لكن دورية الدفع ونوعه وتاريخ بدئه غير محددة.</span>
+              <button className="btn small" onClick={salaryDefaults}>تطبيق الافتراضيات الشائعة</button>
+            </div>
+          )}
+          <div className="card">
+            <h2>أعمدة ملف العميل ({headers.length})</h2>
+            <p className="sub">كل كرت = عمود من ملف العميل مع عيّنة من المكتوب فيه، وتحته الحقل اللي يروح له بقيود.</p>
+            {ColumnCards}
+          </div>
+          {MissingRequired}
+        </>
+      )}
+      {mapView === 'detailed' && (
       <div className="card">
         <div className="maphead">
-          <div><h2>مطابقة الأعمدة</h2><p className="sub" style={{ margin: 0 }}>لكل حقل بالقالب اختر عمود العميل، أو ثبّت قيمة واحدة لكل الموظفين.</p></div>
+          <div><h2>مطابقة الأعمدة — عرض تفصيلي</h2><p className="sub" style={{ margin: 0 }}>لكل حقل بالقالب اختر عمود العميل، أو ثبّت قيمة واحدة لكل الموظفين.</p></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span className="chip" style={{ background: missingRequired.length ? 'var(--error-bg)' : 'var(--ok-bg)', color: missingRequired.length ? 'var(--error)' : 'var(--ok)' }}>
               الإلزامي: {requiredKeys.length - missingRequired.length} / {requiredKeys.length}
@@ -513,6 +635,7 @@ export default function App() {
           </React.Fragment>
         ))}
       </div>
+      )}
       <div className="actions">
         <button className="btn" onClick={() => setStep(0)}>رجوع</button>
         <div className="right"><button className="btn primary" disabled={!records.length} onClick={() => { saveProfile(); setPage(0); setStep(2); }}>التالي: المراجعة ({records.length} موظف)</button></div>
@@ -941,25 +1064,50 @@ export default function App() {
   );
 
   const stepOK = [true, !!tplFile && !!client, !!records.length, !!records.length];
+  const STEP_SUB = [
+    'ارفع قالب قيود الرسمي وملف العميل كما هو',
+    'وين يروح كل عمود من ملف العميل بقالب قيود',
+    'صحّح الأخطاء واعتمد الملاحظات قبل الرفع',
+    'نزّل ملف الرفع الجاهز لقيود والتقارير',
+  ];
+  const STEP_ICON = [ICONS.upload, 'M4 6h7M4 12h7M4 18h7M15 6l5 6-5 6', ICONS.check, ICONS.down];
   return (
-    <div className="app">
-      <div className="top">
-        <div className="brand">
-          <div className="logo"><Icon d={ICONS.users} /></div>
-          <div><h1>مُجهّز بيانات الموظفين</h1><p>من ملف العميل كما هو إلى قالب قيود للموارد البشرية الجاهز للرفع</p></div>
-        </div>
-        <div className="steps">
+    <div className="shell">
+      <aside className="side">
+        <div className="side-logo"><span className="q">Q</span><span className="hr">HR</span><small>مُجهّز بيانات الموظفين</small></div>
+        <nav className="side-nav">
           {STEPS.map((s, i) => (
-            <button key={s} className={`step ${i === step ? 'active' : i < step ? 'done' : ''}`} disabled={i > step && !stepOK[i - 1]} onClick={() => setStep(i)}>
-              <span className="n">{i < step ? '✓' : i + 1}</span>{s}
+            <button key={s} className={`side-item ${i === step ? 'on' : ''} ${i < step ? 'done' : ''}`} disabled={i > step && !stepOK[i - 1]} onClick={() => setStep(i)}>
+              <Icon d={i < step ? ICONS.check : STEP_ICON[i]} size={18} />
+              <span>{s}</span>
+              {i === 2 && rows.length > 0 && counts.error > 0 && <em className="badge">{counts.error}</em>}
             </button>
           ))}
+        </nav>
+        <div className="side-note">
+          <b>🔒 بياناتك تبقى عندك</b>
+          كل المعالجة داخل متصفحك، ولا يُرفع أي ملف لأي مكان.
         </div>
-      </div>
-      {step === 0 && StepFiles}
-      {step === 1 && StepMap}
-      {step === 2 && StepReview}
-      {step === 3 && StepExport}
+      </aside>
+      <main className="main">
+        <header className="topbar">
+          <div>
+            <h1>{STEPS[step]}</h1>
+            <p>{STEP_SUB[step]}</p>
+          </div>
+          <div className="topbar-meta">
+            {tplFile && <span className="pill" title={tplFile.name}>القالب: {tplFile.name}</span>}
+            {client && <span className="pill" title={client.name}>العميل: {client.name}</span>}
+            {rows.length > 0 && <span className={`pill ${counts.error ? 'warn' : 'ok'}`}>{exportable.length} / {rows.length} جاهز للرفع</span>}
+          </div>
+        </header>
+        <div className="content">
+          {step === 0 && StepFiles}
+          {step === 1 && StepMap}
+          {step === 2 && StepReview}
+          {step === 3 && StepExport}
+        </div>
+      </main>
       {Drawer}
       {toast && <div className="toast">{toast}</div>}
     </div>
