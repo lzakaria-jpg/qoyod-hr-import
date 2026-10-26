@@ -668,7 +668,8 @@ export default function App() {
     const q = normKey(query);
     return rows.filter((r) => {
       if (filter === 'excluded' && !r.excluded) return false;
-      if (filter !== 'all' && filter !== 'excluded' && (r.excluded || r.status !== filter)) return false;
+      if (filter === 'ready' && (r.excluded || r.status === 'error')) return false;
+      if (!['all', 'excluded', 'ready'].includes(filter) && (r.excluded || r.status !== filter)) return false;
       if (!q) return true;
       const hay = normKey(['first_name_ar', 'last_name_ar', 'first_name', 'last_name', 'national_id_number', 'employee_no', 'email', 'work_phone_number'].map((k) => r.cells[k].value).join(' ') + ' ' + r.src);
       return hay.includes(q);
@@ -765,8 +766,8 @@ export default function App() {
     <>
       <div className="stats">
         <button className={`stat ${filter === 'all' ? 'on' : ''}`} onClick={() => { setFilter('all'); setPage(0); }}><b>{counts.all}</b><span>إجمالي الصفوف</span></button>
-        <button className={`stat ok ${filter === 'ok' ? 'on' : ''}`} onClick={() => { setFilter('ok'); setPage(0); }}><b>{counts.ok}</b><span>جاهز</span></button>
-        <button className={`stat review ${filter === 'review' ? 'on' : ''}`} onClick={() => { setFilter('review'); setPage(0); }}><b>{counts.review}</b><span>للمراجعة</span></button>
+        <button className={`stat ok ${filter === 'ready' ? 'on' : ''}`} onClick={() => { setFilter('ready'); setPage(0); }}><b>{counts.ok + counts.review}</b><span>جاهز للرفع</span></button>
+        <button className={`stat review ${filter === 'review' ? 'on' : ''}`} onClick={() => { setFilter('review'); setPage(0); }}><b>{counts.review}</b><span>منها عليها ملاحظات (تنرفع عادي)</span></button>
         <button className={`stat error ${filter === 'error' ? 'on' : ''}`} onClick={() => { setFilter('error'); setPage(0); }}><b>{counts.error}</b><span>فيه أخطاء</span></button>
         <button className={`stat ${filter === 'excluded' ? 'on' : ''}`} onClick={() => { setFilter('excluded'); setPage(0); }}><b>{counts.excluded}</b><span>مستبعد</span></button>
       </div>
@@ -1074,7 +1075,7 @@ export default function App() {
   return (
     <div className="shell">
       <aside className="side">
-        <div className="side-logo"><span className="q">Q</span><span className="hr">HR</span><small>مُجهّز بيانات الموظفين</small></div>
+        <div className="side-logo"><span className="mark" dir="ltr"><span className="q">Q</span><span className="hr">HR</span></span><small>مُجهّز بيانات الموظفين</small></div>
         <nav className="side-nav">
           {STEPS.map((s, i) => (
             <button key={s} className={`side-item ${i === step ? 'on' : ''} ${i < step ? 'done' : ''}`} disabled={i > step && !stepOK[i - 1]} onClick={() => setStep(i)}>
