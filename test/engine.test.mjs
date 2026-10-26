@@ -35,7 +35,7 @@ assert.equal(bySrc[6].cells.email.value, 'sara.q@horizon-demo.sa');
 assert.equal(bySrc[6].cells.salary_basic_salary_amount.value, 9800);
 assert.equal(bySrc[7].cells.nationality.value, 'السعودية');
 assert.equal(bySrc[7].cells.work_phone_number.value, '0505050505');
-assert.equal(bySrc[11].cells.date_of_birth.status, 'review', 'تاريخ هجري للمراجعة');
+assert.equal(bySrc[11].cells.date_of_birth.status, 'fixed', 'تاريخ هجري يتحول بدقة (مُصحَّح)');
 assert.equal(bySrc[12].cells.national_id_number.status, 'review', 'هوية 9 خانات');
 assert.equal(bySrc[13].cells.email.status, 'error', 'بريد بدون نطاق');
 assert.equal(bySrc[14].cells.employee_no.status, 'error', 'رقم وظيفي مكرر');

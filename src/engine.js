@@ -695,7 +695,8 @@ export function parseDate(raw, conv, defaultConv = 'dmy') {
   if (y === undefined) return { status: 'error', msg: `تاريخ غير مفهوم: "${clean(raw)}"` };
   if (hijriFlag || (y >= 1300 && y <= 1500)) {
     const g = hijriToGregorian(y, m, d);
-    if (g) return { iso: g, status: 'review', msg: `تاريخ هجري (${y}/${m}/${d}) حُوّل لميلادي — راجعه` };
+    // التحويل بتقويم أم القرى دقيق، فيُعلَّم "مُصحَّح" لا "للمراجعة"
+    if (g) return { iso: g, status: 'fixed', msg: `تاريخ هجري (${y}/${m}/${d}هـ) حُوّل لميلادي بتقويم أم القرى` };
     return { status: 'error', msg: 'تاريخ هجري تعذّر تحويله' };
   }
   if (!validYMD(y, m, d)) return { status: 'error', msg: `تاريخ غير صالح: "${clean(raw)}"` };
@@ -867,6 +868,10 @@ export function makeResolver(fieldKey, list) {
     if (hits.size === 1) return { value: [...hits][0], how: 'token' };
     const scored = entries.map(([ek, ev]) => ({ ev, s: similarity(kn || k, ek) })).sort((a, b) => b.s - a.s);
     if (scored[0] && scored[0].s >= 0.84 && (!scored[1] || scored[0].s - scored[1].s > 0.05)) return { value: scored[0].ev, how: 'fuzzy', score: scored[0].s };
+    // آخر محاولة: كلمة مشتركة مع خيار واحد فقط من القائمة ("المقر - الرياض" ← "الرياض خريطة")
+    const ws = (kn || k).split(' ').filter((w) => w.length >= 3 && !/^\d+$/.test(w));
+    const share = entries.filter(([ek]) => ek.split(' ').some((t) => ws.includes(t)));
+    if (share.length === 1) return { value: share[0][1], how: 'token' };
     return { value: null, how: 'none', suggestions: scored.filter((x) => x.s >= 0.5).slice(0, 3).map((x) => x.ev) };
   };
 }
