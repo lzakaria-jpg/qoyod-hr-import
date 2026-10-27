@@ -785,7 +785,14 @@ export function cleanId(raw) {
   s = toLatinDigits(s);
   const orig = s;
   s = s.replace(/^['`’]/, '').replace(/[\s\-.]/g, '');
-  if (!/^\d+$/.test(s)) return { status: 'error', msg: `رقم الهوية يحوي غير الأرقام: "${orig}"` };
+  if (!/^\d+$/.test(s)) {
+    // نحدد الحرف ومكانه: حرف O يشبه الصفر بأغلب الخطوط فما ينشاف بالعين
+    const what = (ch) => (/[Oo]/.test(ch) ? 'حرف O إنجليزي بدل صفر' : /[lIi|]/.test(ch) ? 'حرف إنجليزي بدل 1' : /[A-Za-z]/.test(ch) ? 'حرف إنجليزي' : HAS_AR.test(ch) ? 'حرف عربي' : 'رمز');
+    const bad = [...s].map((ch, i) => ({ ch, i })).filter((x) => !/\d/.test(x.ch));
+    const parts = bad.slice(0, 3).map((x) => `الخانة ${x.i + 1} "${x.ch}" (${what(x.ch)})`);
+    if (bad.length > 3) parts.push(`+${bad.length - 3}`);
+    return { status: 'error', msg: `رقم الهوية فيه حرف بدل رقم: ${parts.join('، ')} — قيود يقبل أرقام فقط` };
+  }
   const changed = s !== orig;
   return { value: s, status: changed ? 'fixed' : 'ok', msg: changed ? 'إزالة المسافات/الرموز' : undefined };
 }
