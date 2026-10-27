@@ -6,6 +6,8 @@ import {
 } from './engine.js';
 import { readTemplate, fillTemplate, buildReport, buildFollowup, followupRows } from './template.js';
 import DateField, { fmtDate } from './DateField.jsx';
+import { setLang, startTranslator } from './i18n.js';
+import { VERSION } from './version.js';
 
 const STEPS = ['الملفات', 'المطابقة والمراجعة', 'التصدير'];
 const LS_KEY = 'qhr-import-template-v1';
@@ -37,6 +39,7 @@ const ICONS = {
   check: 'M5 12l5 5L20 7',
   users: 'M16 11a4 4 0 10-8 0 4 4 0 008 0zM4 20a8 8 0 0116 0',
   down: 'M12 4v12m0 0l-5-5m5 5l5-5M4 20h16',
+  globe: 'M12 21a9 9 0 100-18 9 9 0 000 18zM3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z',
 };
 // بصمة شكل الملف (عناوين الأعمدة) لحفظ المطابقة واسترجاعها لملفات نفس العميل
 const sigOf = (P) => P.cols.filter((c) => !c.synthetic && c.own).map((c) => normKey(c.own)).join('|');
@@ -72,7 +75,7 @@ function FieldEditor({ f, cell, list, onCommit, onCancel, autoFocus = false, inl
     return (
       <select autoFocus={autoFocus} value={list.includes(cell.value) ? cell.value : ''} onChange={(e) => onCommit(e.target.value)} onBlur={() => !inline && onCancel?.()}>
         <option value="">{cell.value && !list.includes(cell.value) ? `— ${cell.value} (غير موجود بالقائمة) —` : '— فاضي —'}</option>
-        {list.map((v) => <option key={v} value={v}>{v}</option>)}
+        {list.map((v) => <option key={v} value={v} data-noi18n>{v}</option>)}
       </select>
     );
   }
@@ -149,6 +152,9 @@ export default function App() {
 
   // رسالة قصيرة، واختياريًا زر إجراء ({label, fn}) يبقى ظاهرًا وقت أطول
   const [toastAction, setToastAction] = useState(null);
+  const [lang, setLangState] = useState(() => { try { return localStorage.getItem('qhr-lang') === 'en' ? 'en' : 'ar'; } catch { return 'ar'; } });
+  useEffect(() => { startTranslator(); }, []);
+  useEffect(() => { setLang(lang); try { localStorage.setItem('qhr-lang', lang); } catch { /* تخزين محجوب */ } }, [lang]);
   const toastTimer = useRef(null);
   const flash = useCallback((m, action = null) => {
     setToast(m); setToastAction(action);
@@ -388,9 +394,9 @@ export default function App() {
         <div className="lab">{f.label}{f.req && <span className="req">*</span>}<small>{f.key}</small></div>
         <select value={mapping[f.key]?.col ?? ''} onChange={(e) => setMap(f.key, e.target.value)}>
           <option value="">— غير مرتبط —</option>
-          {headers.map((h) => <option key={h.col} value={h.col}>{usedCols.has(h.col) && mapping[f.key]?.col !== h.col ? '• ' : ''}{colLabel(h)}</option>)}
+          {headers.map((h) => <option key={h.col} value={h.col} data-noi18n>{usedCols.has(h.col) && mapping[f.key]?.col !== h.col ? '• ' : ''}{colLabel(h)}</option>)}
         </select>
-        <div className="sample" title={sampleOf(f.key)}>
+        <div className="sample" title={sampleOf(f.key)} data-noi18n>
           {dup && <span className="chip error conf">نفس العمود مربوط بحقل آخر</span>}
           {mapping[f.key] ? <>{confBadge(f.key)} {sampleOf(f.key)}</> : derivedFrom(f.key) ? <span className="chip fixed">يُشتق من {derivedFrom(f.key)}</span> : ''}
         </div>
@@ -398,7 +404,7 @@ export default function App() {
           listVals?.length ? (
             <select value={constants[f.key] ?? ''} onChange={(e) => setConst(f.key, e.target.value)} disabled={!!mapping[f.key]}>
               <option value="">قيمة ثابتة للكل…</option>
-              {listVals.map((v) => <option key={v} value={v}>{v}</option>)}
+              {listVals.map((v) => <option key={v} value={v} data-noi18n>{v}</option>)}
             </select>
           ) : f.type === 'date' ? (
             mapping[f.key] ? <input type="text" disabled placeholder="قيمة ثابتة للكل…" /> : <DateField value={constants[f.key] ?? ''} placeholder="تاريخ ثابت للكل…" onChange={(iso) => setConst(f.key, iso)} />
@@ -424,7 +430,7 @@ export default function App() {
 
   const RawPreview = rawSheet && (
     <div className="rawwrap">
-      <table className="raw">
+      <table className="raw" data-noi18n>
         <tbody>
           {rawSheet.rows.slice(0, 18).map((r, i) => {
             const inHdr = i >= view.hdr.top && i <= view.hdr.idx && view.hdr.idx >= 0;
@@ -467,7 +473,7 @@ export default function App() {
     if (list?.length) return (
       <select value={constants[f.key] ?? ''} onChange={(e) => setConst(f.key, e.target.value)}>
         <option value="">اختر قيمة للكل…</option>
-        {list.map((v) => <option key={v} value={v}>{v}</option>)}
+        {list.map((v) => <option key={v} value={v} data-noi18n>{v}</option>)}
       </select>
     );
     if (f.type === 'date') return <DateField value={constants[f.key] ?? ''} placeholder="تاريخ للكل…" onChange={(iso) => setConst(f.key, iso)} />;
@@ -508,7 +514,7 @@ export default function App() {
               const st = cardState(h.col);
               return (
                 <th key={h.col} className={st.cls} title={h.text}>
-                  <span className="nm">{h.text}</span>
+                  <span className="nm" data-noi18n>{h.text}</span>
                   {st.cls === 'check' && <span className="chip review">تأكد</span>}
                   {ks.length > 1 && <span className="also">+ {ks.slice(1).map(labelOf).join('، ')}</span>}
                 </th>
@@ -519,7 +525,7 @@ export default function App() {
         <tbody>
           {previewRows.map((r, i) => (
             <tr key={i}>
-              {headers.map((h) => <td key={h.col} className={cardState(h.col).cls} dir="auto">{cellText(r[h.col])}</td>)}
+              {headers.map((h) => <td key={h.col} className={cardState(h.col).cls} dir="auto" data-noi18n>{cellText(r[h.col])}</td>)}
             </tr>
           ))}
         </tbody>
@@ -677,7 +683,7 @@ export default function App() {
         {unusedCols.length > 0 && (
           <div className="unused">
             <span className="sub" style={{ margin: 0 }}>أعمدة العميل غير المستخدمة ({unusedCols.length}):</span>
-            {unusedCols.map((h) => <span key={h.col} className="chip gray" title={columnSample(prepared, h.col, 3).join(' · ')}>{h.text}</span>)}
+            {unusedCols.map((h) => <span key={h.col} className="chip gray" title={columnSample(prepared, h.col, 3).join(' · ')} data-noi18n>{h.text}</span>)}
           </div>
         )}
         <div className="maprow head"><div>حقل القالب</div><div>عمود العميل</div><div>عيّنة من البيانات</div><div>قيمة ثابتة</div></div>
@@ -847,7 +853,7 @@ export default function App() {
       <td key={f.key}>
         <div className={`cell ${c.status} ${c.manual ? 'manual' : ''} ${c.acked ? 'acked' : ''}`} title={c.acked ? `تمت المراجعة\n${tip}` : tip} onClick={() => setEditing({ src: r.src, key: f.key })}>
           {['fixed', 'review', 'error'].includes(c.status) && <i className="dot" />}
-          <span>{display || (c.status === 'empty' ? '—' : '')}</span>
+          <span data-noi18n>{display || (c.status === 'empty' ? '—' : '')}</span>
         </div>
       </td>
     );
@@ -926,7 +932,7 @@ export default function App() {
         <td key={key}>
           <div className={`cell ${st}`} title={tip ? `${tip}\nاضغط لتعديل الاسم` : 'اضغط لتعديل الاسم'} onClick={() => setDrawerRow(r.src)}>
             {['fixed', 'review', 'error'].includes(st) && <i className="dot" />}
-            <span>{`${ca.value || ''} ${cb.value || ''}`.trim() || '—'}</span>
+            <span data-noi18n>{`${ca.value || ''} ${cb.value || ''}`.trim() || '—'}</span>
           </div>
         </td>
       );
@@ -947,7 +953,7 @@ export default function App() {
               <th className="sticky c1">الحالة</th>
               {cols.map((h) => {
                 const st = cardState(h.col);
-                return <th key={h.col} className={st.cls} title={h.text}><span className="nm">{h.text}</span>{st.cls === 'check' && <span className="chip review">تأكد</span>}</th>;
+                return <th key={h.col} className={st.cls} title={h.text}><span className="nm" data-noi18n>{h.text}</span>{st.cls === 'check' && <span className="chip review">تأكد</span>}</th>;
               })}
               {extras.map((f) => <th key={f.key} className="extra" title={f.label}><span className="nm">{f.label}{tplFile.tpl.required.has(f.key) ? ' *' : ''}</span></th>)}
             </tr>
@@ -961,7 +967,7 @@ export default function App() {
                   <td className="sticky c1"><div className="rowstate"><span className={`chip ${r.status}`}>{r.status === 'ok' ? 'جاهز' : r.status === 'review' ? `مراجعة ${r.reviewCount}` : `خطأ ${r.errorCount}`}</span></div></td>
                   {cols.map((h) => {
                     const k = primaryOf(h.col);
-                    if (!k) return <td key={h.col} className="ignored"><div className="cell">{cellText(raw[h.col])}</div></td>;
+                    if (!k) return <td key={h.col} className="ignored"><div className="cell" data-noi18n>{cellText(raw[h.col])}</div></td>;
                     if (k === 'full_name_ar') return nameCell(r, 'first_name_ar', 'last_name_ar', h.col);
                     if (k === 'full_name_en') return nameCell(r, 'first_name', 'last_name', h.col);
                     return <React.Fragment key={h.col}>{renderCell(r, FIELD_BY_KEY[k])}</React.Fragment>;
@@ -1162,6 +1168,16 @@ export default function App() {
         <div className="side-note">
           <b>🔒 بياناتك تبقى عندك</b>
           كل المعالجة داخل متصفحك، ولا يُرفع أي ملف لأي مكان.
+        </div>
+        <div className="side-foot">
+          <label className="lang" title="اللغة">
+            <Icon d={ICONS.globe} size={16} />
+            <select value={lang} onChange={(e) => setLangState(e.target.value)} data-noi18n>
+              <option value="ar">العربية</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+          <span className="ver" dir="ltr" title="الإصدار">{VERSION}</span>
         </div>
       </aside>
       <main className="main">

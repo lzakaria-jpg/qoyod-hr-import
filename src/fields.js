@@ -139,6 +139,18 @@ MORE_ALIASES.job_title.push('profession', 'profession iqama', 'المهنه', 't
 MORE_ALIASES.date_of_birth.push('dob', 'birthdate', 'date birth');
 MORE_ALIASES.join_date.push('dateofjoining', 'joiningdate', 'joining', 'doj');
 for (const [k, arr] of Object.entries(MORE_ALIASES)) HEADER_ALIASES[k].push(...arr);
+// صيغ تصدير أنظمة HR الشائعة (ZenHR / Bayzat / Odoo / جسر / مسير)
+const EXPORT_ALIASES = {
+  employee_no: ['employment number', 'employment no', 'badge id', 'badge number', 'personnel number', 'رقم الموظف بالنظام'],
+  join_date: ['hiring date', 'hired date', 'hired on', 'date of hire', 'date of hiring', 'first working day'],
+  national_id_number: ['identification no', 'identification number', 'id number', 'national id iqama'],
+  nationality: ['nationality country'],
+  residence_country: ['country of residence', 'private country'],
+  salary_basic_salary_amount: ['wage', 'contract wage', 'basic pay'],
+  education_level: ['certificate level', 'certificate'],
+  work_phone_number: ['work mobile', 'mobile number'],
+};
+for (const [k, arr] of Object.entries(EXPORT_ALIASES)) HEADER_ALIASES[k].push(...arr);
 const MORE_FULLNAME = ['beneficiary name', 'اسم المستفيد', 'employee name as per iqama', 'name as per iqama', 'الاسم حسب الهويه', 'الاسم حسب الاقامه', 'name en', 'name ar', 'emp name', 'employee full name'];
 
 // كلمات إذا ظهرت بعنوان العمود تمنع ربطه بهذا الحقل (مثلًا "اسم الأب" ليس الاسم الكامل، "بدل السكن" ليس الراتب الأساسي)
@@ -155,7 +167,7 @@ export const HEADER_NEG = {
   national_id_expiry_date: IDDATE_NEG,
   date_of_birth: ['الزوج', 'الزوجه', 'المرافق', 'الابن', 'spouse', 'dependent', 'child'],
   email: ['العمل', 'عمل', 'work', 'company', 'official', 'الرسمي', 'الشركه', 'المدير', 'manager'],
-  employee_no: ['الهويه', 'الاقامه', 'id', 'iqama', 'national', 'الجواز', 'passport', 'الحساب', 'account'],
+  employee_no: ['الهويه', 'الاقامه', 'iqama', 'national', 'الجواز', 'passport', 'الحساب', 'account'],
   job_title: ['المدير', 'manager'],
   account_number: ['قديم', 'القديم', 'old', 'previous', 'سابق', 'السابق', 'iban', 'ايبان', 'الايبان', 'الدولي'],
   emergency_contact_name: ['رقم', 'جوال', 'هاتف', 'phone', 'mobile', 'no', 'number'],
@@ -188,7 +200,7 @@ export const VALUE_ALIASES = {
   },
   employment_status: {
     'مفعّل': ['active', 'نشط', 'فعال', 'على راس العمل', 'علي راس العمل', 'مفعل', 'موظف', 'working', 'قائم', 'على رأس العمل', 'on duty', 'employed', 'current', 'بالخدمه', 'على الخدمه', 'يعمل'],
-    'غير مفعّل': ['inactive', 'غير نشط', 'منتهي', 'terminated', 'موقوف', 'غير فعال', 'مستقيل', 'ترك العمل', 'غير مفعل', 'resigned', 'left', 'exited', 'final exit', 'خروج نهائي', 'منتهي الخدمه', 'منتهيه خدمته', 'انتهت خدمته', 'مفصول', 'dismissed', 'ended', 'end of service', 'نهايه الخدمه', 'نهايه خدمه', 'استقال', 'هارب', 'متغيب عن العمل', 'absconded', 'تم انهاء الخدمه'],
+    'غير مفعّل': ['inactive', 'archived', 'not active', 'deactivated', 'منتهي الخدمة', 'غير نشط', 'منتهي', 'terminated', 'موقوف', 'غير فعال', 'مستقيل', 'ترك العمل', 'غير مفعل', 'resigned', 'left', 'exited', 'final exit', 'خروج نهائي', 'منتهي الخدمه', 'منتهيه خدمته', 'انتهت خدمته', 'مفصول', 'dismissed', 'ended', 'end of service', 'نهايه الخدمه', 'نهايه خدمه', 'استقال', 'هارب', 'متغيب عن العمل', 'absconded', 'تم انهاء الخدمه'],
     'فترة الإشعار': ['notice period', 'notice', 'فتره اشعار', 'فترة اشعار', 'under notice', 'في فترة الاشعار', 'تحت الاشعار', 'on notice', 'serving notice', 'notice served', 'في فتره الانذار', 'فتره الانذار'],
   },
   employment_type: {
@@ -204,7 +216,7 @@ export const VALUE_ALIASES = {
     'أقل من الثانوية': ['less than high school', 'below high school', 'اقل من ثانوي', 'ابتدائي', 'primary', 'intermediate', '~متوسط'],
     'شهادة ثانوية': ['high school', 'secondary', 'ثانويه', 'ثانوي', 'ثانويه عامه', 'ثانوية عامة', 'توجيهي'],
     'درجة المنتسبين': ['associate', 'associate degree', 'منتسبين', '~diploma', '~دبلوم', '~دبلوم عالي'],
-    'درجة البكالوريوس': ['bachelor', 'bachelors', "bachelor's", 'bsc', 'ba', 'بكالوريوس', 'بكالريوس', 'ليسانس', '~جامعي', '~جامعية'],
+    'درجة البكالوريوس': ['bachelor', "bachelor's degree", 'bachelors degree', 'bachelor degree', 'bachelor s degree', 'university degree', 'bachelors', "bachelor's", 'bsc', 'ba', 'بكالوريوس', 'بكالريوس', 'ليسانس', '~جامعي', '~جامعية'],
     'درجة ماجستير': ['master', 'masters', "master's", 'msc', 'mba', 'ماجستير', 'ma'],
     'درجة دكتوراه': ['phd', 'doctorate', 'دكتوراه', 'doctor', 'ph d'],
   },
@@ -232,10 +244,12 @@ export const VALUE_ALIASES = {
     'التسويق': ['mktg', 'mkt', 'mkting', 'marketing', 'تسويق', 'التسويق والاعلان'],
     'العمليات': ['operations', 'عمليات', 'ops', 'operation', 'التشغيل', 'تشغيل'],
     'تقنية المعلومات': ['it', 'i t', 'information technology', 'تقنيه معلومات', 'الدعم الفني', 'الحاسب الالي', 'tech', 'technology', 'it department'],
-    'خدمة العملاء': ['cs', 'cx', 'customer services', 'customer service', 'customer care', 'customer support', 'call center', 'خدمه عملاء', 'الدعم', 'support'],
+    'خدمة العملاء': ['cs', 'cx', 'customer services', 'customer service', 'customer care', 'customer support', 'call center', 'call centre', 'مركز الاتصال', 'مركز اتصال', 'الكول سنتر', 'contact center', 'customer experience', 'تجربه العملاء', 'خدمه عملاء', 'الدعم', 'support'],
     'المشتريات': ['proc', 'purch', 'procurement', 'purchasing', 'purchase', 'مشتريات'],
     'الشؤون الإدارية': ['admin', 'administration', 'الشئون الاداريه', 'الشؤون الاداريه', 'اداريه', 'الاداريه', 'شؤون اداريه'],
     'القانونية': ['legal', 'الشؤون القانونيه', 'قانونيه'],
+    'الذكاء الاصطناعي': ['ai', 'a i', 'artificial intelligence', 'data and ai', 'data ai', 'ai and data', 'data science', 'ai department', 'ذكاء اصطناعي', 'الذكاء الصناعي', 'الذكاء الاصطناعى'],
+    'ادارة المنتج': ['product', 'products', 'product management', 'product team', 'product dept', 'المنتج', 'المنتجات', 'ادارة المنتجات', 'إدارة المنتج', 'إدارة المنتجات', 'اداره المنتجات', 'اداره المنتج'],
     'المستودعات': ['warehouse', 'stores', 'مستودع', 'المستودع', 'logistics', 'اللوجستيات'],
   },
   bank_account_currency: {
@@ -258,7 +272,7 @@ export const VALUE_ALIASES = {
 
 // الجنسيات (صفات) وأسماء الدول الإنجليزية → اسم الدولة العربي كما في القالب
 const COUNTRY_ALIASES = {
-  'السعودية': ['سعودي', 'سعوديه', 'سعودية', 'saudi', 'saudi arabia', 'saudi arabian', 'ksa', 'المملكه العربيه السعوديه', 'المملكة العربية السعودية', 'sa'],
+  'السعودية': ['سعودي', 'سعوديه', 'سعودية', 'saudi', 'saudi arabia', 'saudi arabian', 'ksa', 'المملكه العربيه السعوديه', 'المملكة العربية السعودية', 'sa', 'المملكه', 'المملكة', 'k s a', 'saudia', 'kingdom of saudi arabia'],
   'الإمارات العربيّة المتّحدة': ['اماراتي', 'اماراتيه', 'الامارات', 'الإمارات', 'uae', 'emirati', 'united arab emirates', 'الامارات العربيه المتحده', 'ae'],
   'قطر': ['قطري', 'قطريه', 'qatar', 'qatari'],
   'الكويت': ['كويتي', 'كويتيه', 'kuwait', 'kuwaiti'],
@@ -334,7 +348,7 @@ VALUE_ALIASES.residence_country = COUNTRY_ALIASES;
 export const VALUE_TRANSLATE = {
   location: {
     riyadh: 'الرياض', riyad: 'الرياض', ruh: 'الرياض', jeddah: 'جدة', jedda: 'جدة', jiddah: 'جدة', jed: 'جدة', dammam: 'الدمام', dmm: 'الدمام',
-    khobar: 'الخبر', 'al khobar': 'الخبر', alkhobar: 'الخبر', makkah: 'مكة', mecca: 'مكة', makka: 'مكة', madinah: 'المدينة', medina: 'المدينة', madina: 'المدينة',
+    khobar: 'الخبر', factory: 'المصنع', plant: 'المصنع', 'the factory': 'المصنع', 'manufacturing plant': 'المصنع', 'main factory': 'المصنع', 'riyadh map': 'الرياض خريطة', 'riyadh khareeta': 'الرياض خريطة', 'motamayez map': 'متميزخريطة', 'motamayez': 'متميزخريطة', 'al khobar': 'الخبر', alkhobar: 'الخبر', makkah: 'مكة', mecca: 'مكة', makka: 'مكة', madinah: 'المدينة', medina: 'المدينة', madina: 'المدينة',
     taif: 'الطائف', tabuk: 'تبوك', abha: 'أبها', qassim: 'القصيم', buraidah: 'بريدة', buraydah: 'بريدة', jubail: 'الجبيل', yanbu: 'ينبع',
     hail: 'حائل', jazan: 'جازان', jizan: 'جازان', najran: 'نجران', 'khamis mushait': 'خميس مشيط', 'al ahsa': 'الأحساء', alahsa: 'الأحساء', hofuf: 'الهفوف',
     dubai: 'دبي', 'abu dhabi': 'أبوظبي', cairo: 'القاهرة', 'head office': 'المقر الرئيسي', hq: 'المقر الرئيسي', 'main office': 'المقر الرئيسي',

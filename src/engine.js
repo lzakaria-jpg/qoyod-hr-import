@@ -38,12 +38,19 @@ export function similarity(a, b) {
   if (a === b) return 1;
   if (!a || !b) return 0;
   const m = a.length, n = b.length;
-  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-  return 1 - dp[m][n] / Math.max(m, n);
+  // فرق الطول وحده يحدّ التشابه من فوق: لا داعي للحساب الكامل إذا كان بعيدًا
+  const cap = 1 - Math.abs(m - n) / Math.max(m, n);
+  if (cap < 0.5) return cap;
+  // مسافة Levenshtein بصفّين فقط (أسرع بكثير من مصفوفة كاملة)
+  let prev = new Uint16Array(n + 1), cur = new Uint16Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i;
+    const ai = a.charCodeAt(i - 1);
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ai === b.charCodeAt(j - 1) ? 0 : 1));
+    [prev, cur] = [cur, prev];
+  }
+  return 1 - prev[n] / Math.max(m, n);
 }
 const HAS_AR = /[؀-ۿ]/;
 const HAS_LAT = /[A-Za-z]/;
@@ -165,10 +172,13 @@ function headerFieldScore(alts, key) {
   return best;
 }
 const ALL_KEYS = [...FIELDS.map((f) => f.key), 'full_name'];
+const HDR_CACHE = new Map(); // نفس النص يتكرر بصفوف البيانات (أسماء أقسام، مدن…)
 function bestHeaderScore(text) {
+  if (HDR_CACHE.has(text)) return HDR_CACHE.get(text);
   const tok = [headerTokens(text)];
   let m = 0;
   for (const k of ALL_KEYS) m = Math.max(m, headerFieldScore(tok, k));
+  if (HDR_CACHE.size < 5000) HDR_CACHE.set(text, m);
   return m;
 }
 
@@ -448,7 +458,7 @@ function profileColumn(vals, rowsCount, resolvers) {
   for (const k of LIST_FIELDS) {
     const r = resolvers[k];
     if (!r) continue;
-    const ok = share((v) => { const x = r(cellText(v)); return x && x.how !== 'none' && x.how !== 'fuzzy' && x.how !== 'token'; });
+    const ok = share((v) => { const x = r(cellText(v), true); return x && x.how !== 'none' && x.how !== 'fuzzy' && x.how !== 'token'; });
     put(k, ok, CONTENT_ONLY_LISTS.includes(k) && ok >= 0.7 && (k !== 'department' && k !== 'location' ? true : ok >= 0.7) ? ok : 0);
   }
 
@@ -820,20 +830,36 @@ export function makeResolver(fieldKey, list) {
   const noise = new Set((VALUE_NOISE[fieldKey] || []).map((w) => normKey(w)));
   const isCountry = fieldKey === 'nationality' || fieldKey === 'residence_country';
 
+  // نفس القيمة بدون مسافات ("متميز خريطة" = "متميزخريطة")
+  const byTight = new Map();
+  for (const [kk, v] of byKey) { const t = kk.replace(/ /g, ''); byTight.set(t, byTight.has(t) && byTight.get(t) !== v ? null : v); }
   function direct(k, s) {
     if (byKey.has(k)) { const value = byKey.get(k); return { value, how: value === s ? 'exact' : 'norm' }; }
+    const tight = byTight.get(k.replace(/ /g, ''));
+    if (tight) return { value: tight, how: 'norm' };
     if (aliasMap.has(k)) { const a = aliasMap.get(k); return { value: a.value, how: a.approx ? 'approx' : 'alias' }; }
     return null;
   }
+  const entryTok = entries.map(([ek]) => ek.split(' '));
   function contain(k) {
     const kTok = k.split(' ');
-    const sub = entries.filter(([ek]) => { const eTok = ek.split(' '); return kTok.every((t) => eTok.includes(t)) && eTok.length > kTok.length; });
+    const sub = entries.filter((_, i) => { const eTok = entryTok[i]; return eTok.length > kTok.length && kTok.every((t) => eTok.includes(t)); });
     if (sub.length === 1) return { value: sub[0][1], how: 'approx' };
-    const sup = entries.filter(([ek]) => { const eTok = ek.split(' '); return eTok.every((t) => kTok.includes(t)) && kTok.length > eTok.length; });
+    const sup = entries.filter((_, i) => { const eTok = entryTok[i]; return kTok.length > eTok.length && eTok.every((t) => kTok.includes(t)); });
     if (sup.length === 1) return { value: sup[0][1], how: 'approx' };
     return null;
   }
-  return function resolve(raw) {
+  // نفس القيمة تتكرر كثيرًا بالملف: نحفظ نتيجتها
+  // quick: لفحص المحتوى فقط — يتوقف قبل المطابقة الضبابية المكلفة (فحص المحتوى لا يعتدّ بها أصلًا)
+  const cache = new Map();
+  return function resolve(raw, quick = false) {
+    const key = (quick ? '' : '') + String(raw ?? '');
+    if (cache.has(key)) return cache.get(key);
+    const out = resolveOnce(raw, quick);
+    if (cache.size < 20000) cache.set(key, out);
+    return out;
+  };
+  function resolveOnce(raw, quick) {
     const s = clean(raw);
     const k = normKey(s);
     if (!k) return null;
@@ -848,13 +874,19 @@ export function makeResolver(fieldKey, list) {
     if (translate) {
       const words = (kn || k).split(' ');
       const tr = [];
+      let whole = true; // كل الكلمات لها ترجمة بالقاموس
       for (let i = 0; i < words.length; i++) {
         const two = i + 1 < words.length ? translate.get(`${words[i]} ${words[i + 1]}`) : null;
         if (two) { tr.push(two); i++; continue; }
-        tr.push(translate.get(words[i]) || words[i]);
+        const one = translate.get(words[i]);
+        if (!one) whole = false;
+        tr.push(one || words[i]);
       }
       const tk = normKey(tr.join(' '));
       if (tk !== (kn || k)) {
+        // ترجمة كاملة من القاموس تطابق قيمة القالب حرفيًا (Factory ← المصنع): تصحيح مؤكد وليس تقريبي
+        const exact = whole && direct(tk, tr.join(' '));
+        if (exact) return { ...exact, how: 'alias' };
         r = direct(tk, tr.join(' ')) || contain(tk);
         if (!r) { for (const w of tr) { const x = normKey(w); const c = x !== tk && (direct(x, w) || contain(x)); if (c) { r = c; break; } } }
         if (r) return { ...r, how: 'approx' };
@@ -866,6 +898,7 @@ export function makeResolver(fieldKey, list) {
     const hits = new Set();
     for (const w of (kn || k).split(' ')) { const x = direct(w, w); if (x) hits.add(x.value); }
     if (hits.size === 1) return { value: [...hits][0], how: 'token' };
+    if (quick) return { value: null, how: 'none' };
     const scored = entries.map(([ek, ev]) => ({ ev, s: similarity(kn || k, ek) })).sort((a, b) => b.s - a.s);
     if (scored[0] && scored[0].s >= 0.84 && (!scored[1] || scored[0].s - scored[1].s > 0.05)) return { value: scored[0].ev, how: 'fuzzy', score: scored[0].s };
     // آخر محاولة: كلمة مشتركة مع خيار واحد فقط من القائمة ("المقر - الرياض" ← "الرياض خريطة")
@@ -873,7 +906,7 @@ export function makeResolver(fieldKey, list) {
     const share = entries.filter(([ek]) => ek.split(' ').some((t) => ws.includes(t)));
     if (share.length === 1) return { value: share[0][1], how: 'token' };
     return { value: null, how: 'none', suggestions: scored.filter((x) => x.s >= 0.5).slice(0, 3).map((x) => x.ev) };
-  };
+  }
 }
 
 /* ============================ تقسيم الاسم الكامل ============================ */
